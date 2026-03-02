@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员后台 - 任务管理系统</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📋 管理后台</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-page="dashboard">
+                    <span class="icon">📊</span>
+                    <span>数据看板</span>
+                </a>
+                <a href="#" class="nav-item" data-page="ai-task">
+                    <span class="icon">💬</span>
+                    <span>AI任务生成</span>
+                </a>
+                <a href="#" class="nav-item" data-page="task-manage">
+                    <span class="icon">📋</span>
+                    <span>任务管理</span>
+                </a>
+                <a href="#" class="nav-item" data-page="employee">
+                    <span class="icon">👥</span>
+                    <span>员工管理</span>
+                </a>
+                <a href="#" class="nav-item" data-page="settings">
+                    <span class="icon">⚙️</span>
+                    <span>系统设置</span>
+                </a>
+            </nav>
+        </aside>
+        
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 顶部导航 -->
+            <header class="top-nav">
+                <div class="top-nav-left">
+                    <h1 id="pageTitle">数据看板</h1>
+                </div>
+                <div class="top-nav-right">
+                    <button class="nav-icon-btn" id="notificationBtn">
+                        <span>🔔</span>
+                        <span class="badge">3</span>
+                    </button>
+                    <button class="nav-icon-btn" id="aiTaskBtn">
+                        <span>💬</span>
+                    </button>
+                    <div class="user-menu">
+                        <div class="user-avatar">管</div>
+                        <div class="user-info">
+                            <div class="user-name">管理员</div>
+                            <div class="user-role">Admin</div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- 内容区域 -->
+            <div class="content-area" id="contentArea">
+                <!-- 动态加载内容 -->
+            </div>
+        </main>
+    </div>
+    
+    <!-- AI任务生成模态框 - 已废弃，改为页面显示 -->
+    
+    <script src="admin-data.js"></script>
+    <script src="admin.js"></script>
+</body>
+</html>
