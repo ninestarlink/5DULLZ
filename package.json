@@ -4,8 +4,8 @@
   "description": "任务管理系统 - 带后端和数据库",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "start:prod": "node server-production.js",
+    "start": "node init-db.js && node server-production.js",
+    "start:prod": "node init-db.js && node server-production.js",
     "dev": "nodemon server.js",
     "init-db": "node init-db.js",
     "pm2:start": "pm2 start server-production.js --name task-system",
