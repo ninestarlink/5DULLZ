@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await AuthAPI.login(username, password);
             
             // 保存token
-            API.setToken(response.token);
+            api.setToken(response.token);
             
             // 保存用户信息
             localStorage.setItem('currentUser', JSON.stringify(response.user));
