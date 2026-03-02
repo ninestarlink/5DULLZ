@@ -21,23 +21,12 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'database.db');
 // 上传目录（生产环境使用绝对路径）
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 
-// CORS配置
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['http://localhost:3000'];
-
+// CORS配置 - 允许所有来源（因为前后端在同一域名）
 const corsOptions = {
-    origin: function (origin, callback) {
-        // 允许没有origin的请求（如移动应用、Postman等）
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.indexOf(origin) !== -1 || NODE_ENV === 'development') {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true
+    origin: true, // 允许所有来源
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 // 中间件
