@@ -7,7 +7,7 @@ const API_CONFIG = {
     },
     // 生产环境（云端）
     production: {
-        baseURL: 'https://your-backend-domain.com', // 改成你的后端域名或IP
+        baseURL: 'https://5dullz-production.up.railway.app', // Railway部署地址
         timeout: 30000
     }
 };
