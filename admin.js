@@ -367,11 +367,39 @@ document.addEventListener('DOMContentLoaded', async function() {
     };
     
     // 显示生成的任务
-    function displayGeneratedTasks(tasks, employees) {
+    async function displayGeneratedTasks(tasks, employees) {
         const container = document.getElementById('generatedTasks');
         const tasksList = document.getElementById('tasksList');
         
-        tasksList.innerHTML = tasks.map((task, index) => `
+        // 为每个任务智能分配员工
+        const tasksWithAssignment = await Promise.all(tasks.map(async (task) => {
+            try {
+                // 调用AI智能分配
+                const suggestion = await zhipuAI.suggestAssignment(task, employees);
+                return {
+                    ...task,
+                    suggestedEmployeeId: suggestion.employeeId,
+                    assignmentReason: suggestion.reason
+                };
+            } catch (error) {
+                console.error('智能分配失败:', error);
+                // 如果AI分配失败，根据技能匹配
+                const matchedEmployee = employees.find(emp => 
+                    emp.skills && task.keywords && 
+                    emp.skills.some(skill => task.keywords.some(kw => kw.includes(skill) || skill.includes(kw)))
+                );
+                return {
+                    ...task,
+                    suggestedEmployeeId: matchedEmployee?.id || null,
+                    assignmentReason: matchedEmployee ? `技能匹配：${matchedEmployee.skills.join('、')}` : '未找到匹配员工'
+                };
+            }
+        }));
+        
+        tasksList.innerHTML = tasksWithAssignment.map((task, index) => {
+            const assignedEmployee = employees.find(e => e.id === task.suggestedEmployeeId);
+            
+            return `
             <div class="card" style="margin-bottom: 16px;" data-task-index="${index}">
                 <div style="padding: 16px;">
                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
@@ -393,10 +421,12 @@ document.addEventListener('DOMContentLoaded', async function() {
                             </select>
                         </div>
                         <div>
-                            <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">分配给</label>
-                            <select class="task-assignee-input" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;">
+                            <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
+                                分配给 ${task.suggestedEmployeeId ? '🤖 AI推荐' : ''}
+                            </label>
+                            <select class="task-assignee-input" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; ${task.suggestedEmployeeId ? 'background: rgba(59, 130, 246, 0.1);' : ''}">
                                 <option value="">未分配</option>
-                                ${employees.map(emp => `<option value="${emp.id}">${emp.name}</option>`).join('')}
+                                ${employees.map(emp => `<option value="${emp.id}" ${emp.id === task.suggestedEmployeeId ? 'selected' : ''}>${emp.name}${emp.id === task.suggestedEmployeeId ? ' ⭐' : ''}</option>`).join('')}
                             </select>
                         </div>
                         <div>
@@ -406,17 +436,29 @@ document.addEventListener('DOMContentLoaded', async function() {
                                    style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;">
                         </div>
                     </div>
+                    ${task.suggestedEmployeeId && assignedEmployee ? `
+                        <div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 3px solid var(--primary); margin-bottom: 12px;">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                <span style="font-size: 12px; font-weight: 600; color: var(--primary);">🤖 AI推荐理由</span>
+                            </div>
+                            <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">${task.assignmentReason}</p>
+                            <div style="margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap;">
+                                <span style="font-size: 11px; color: var(--text-muted);">员工技能：</span>
+                                ${assignedEmployee.skills?.map(skill => `<span class="tag" style="font-size: 11px;">${skill}</span>`).join('') || '<span style="font-size: 11px; color: var(--text-muted);">无</span>'}
+                            </div>
+                        </div>
+                    ` : ''}
                     <div style="display: flex; gap: 8px;">
                         ${task.keywords?.map(kw => `<span class="tag">${kw}</span>`).join('') || ''}
                     </div>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
         
         container.style.display = 'block';
         
         // 保存任务数据
-        window.generatedTasksData = tasks;
+        window.generatedTasksData = tasksWithAssignment;
         window.generatedTasksEmployees = employees;
     }
     
@@ -768,10 +810,101 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.viewEmployeeTasks = async function(employeeId) {
         try {
             const tasks = await TaskAPI.getTasks({ assignee_id: employeeId });
-            const employee = window.employeesList?.find(e => e.id === employeeId);
+            const employees = await EmployeeAPI.getEmployees();
+            const employee = employees.find(e => e.id === employeeId);
             
-            alert(`${employee?.name || '员工'} 的任务：\n\n共 ${tasks.length} 个任务\n已完成: ${tasks.filter(t => t.status === 'completed').length}\n进行中: ${tasks.filter(t => t.status === 'in_progress' || t.status === 'pending').length}`);
+            if (!employee) {
+                alert('员工信息不存在');
+                return;
+            }
+            
+            // 在页面内显示任务列表
+            contentArea.innerHTML = `
+                <div style="margin-bottom: 24px;">
+                    <button class="btn btn-secondary" onclick="renderEmployeeManage()" style="margin-bottom: 16px;">← 返回员工列表</button>
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: 600;">
+                            ${employee.avatar || employee.name[0]}
+                        </div>
+                        <div>
+                            <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 4px;">${employee.name} 的任务</h2>
+                            <p style="color: var(--text-muted);">共 ${tasks.length} 个任务 | 已完成 ${tasks.filter(t => t.status === 'completed').length} 个</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border);">
+                                <th style="padding: 16px; text-align: left; font-weight: 600;">任务名称</th>
+                                <th style="padding: 16px; text-align: left; font-weight: 600;">状态</th>
+                                <th style="padding: 16px; text-align: left; font-weight: 600;">优先级</th>
+                                <th style="padding: 16px; text-align: left; font-weight: 600;">截止日期</th>
+                                <th style="padding: 16px; text-align: left; font-weight: 600;">进度</th>
+                                <th style="padding: 16px; text-align: left; font-weight: 600;">贡献值</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tasks.length > 0 ? tasks.map(task => `
+                                <tr style="border-bottom: 1px solid var(--border);">
+                                    <td style="padding: 16px;">
+                                        <div style="font-weight: 600;">${task.title}</div>
+                                        <div style="font-size: 13px; color: var(--text-muted);">${task.description || '无描述'}</div>
+                                    </td>
+                                    <td style="padding: 16px;">
+                                        <span class="status-badge status-${task.status}">${getStatusText(task.status)}</span>
+                                    </td>
+                                    <td style="padding: 16px;">
+                                        <span class="priority-badge priority-${task.priority}">${getPriorityText(task.priority)}</span>
+                                    </td>
+                                    <td style="padding: 16px;">${task.deadline || '无'}</td>
+                                    <td style="padding: 16px;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                                <div style="width: ${task.progress || 0}%; height: 100%; background: var(--primary); transition: width 0.3s;"></div>
+                                            </div>
+                                            <span style="font-size: 12px; color: var(--text-muted); min-width: 35px;">${task.progress || 0}%</span>
+                                        </div>
+                                    </td>
+                                    <td style="padding: 16px;">
+                                        <span style="color: var(--primary); font-weight: 600;">💎 ${task.contribution || 0}</span>
+                                    </td>
+                                </tr>
+                            `).join('') : `
+                                <tr>
+                                    <td colspan="6" style="padding: 60px; text-align: center; color: var(--text-muted);">
+                                        <div style="font-size: 48px; margin-bottom: 16px;">📋</div>
+                                        <p>该员工暂无任务</p>
+                                    </td>
+                                </tr>
+                            `}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 24px;">
+                    <div class="card" style="padding: 20px; text-align: center;">
+                        <div style="font-size: 32px; font-weight: 600; color: var(--primary); margin-bottom: 8px;">${tasks.length}</div>
+                        <div style="color: var(--text-muted);">总任务数</div>
+                    </div>
+                    <div class="card" style="padding: 20px; text-align: center;">
+                        <div style="font-size: 32px; font-weight: 600; color: var(--success); margin-bottom: 8px;">${tasks.filter(t => t.status === 'completed').length}</div>
+                        <div style="color: var(--text-muted);">已完成</div>
+                    </div>
+                    <div class="card" style="padding: 20px; text-align: center;">
+                        <div style="font-size: 32px; font-weight: 600; color: var(--warning); margin-bottom: 8px;">${tasks.filter(t => t.status === 'in_progress' || t.status === 'pending').length}</div>
+                        <div style="color: var(--text-muted);">进行中</div>
+                    </div>
+                    <div class="card" style="padding: 20px; text-align: center;">
+                        <div style="font-size: 32px; font-weight: 600; color: var(--secondary); margin-bottom: 8px;">${tasks.reduce((sum, t) => sum + (t.contribution || 0), 0)}</div>
+                        <div style="color: var(--text-muted);">总贡献值</div>
+                    </div>
+                </div>
+            `;
+            
         } catch (error) {
+            console.error('获取员工任务失败:', error);
             alert('获取任务失败: ' + error.message);
         }
     };

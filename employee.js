@@ -277,13 +277,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             const notifications = await NotificationAPI.getNotifications();
             console.log('通知列表:', notifications);
             
+            // 只显示当前用户的通知
+            const myNotifications = notifications.filter(n => n.user_id === currentUser.id);
+            
             contentArea.innerHTML = `
                 <div class="card">
                     <div class="card-header">
                         <h3 class="card-title">🔔 通知中心</h3>
                     </div>
                     <div style="padding: 20px;">
-                        ${notifications.length > 0 ? notifications.map(notif => `
+                        ${myNotifications.length > 0 ? myNotifications.map(notif => `
                             <div style="padding: 16px; background: ${notif.is_read ? 'var(--bg-tertiary)' : 'rgba(59, 130, 246, 0.1)'}; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid var(--primary);">
                                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
                                     <h4 style="font-weight: 600; color: var(--text-primary);">${notif.title}</h4>
