@@ -215,14 +215,283 @@ document.addEventListener('DOMContentLoaded', async function() {
     // ==================== AI任务生成 ====================
     function renderAITaskPage() {
         contentArea.innerHTML = `
-            <div style="text-align: center; padding: 60px;">
-                <div style="font-size: 48px; margin-bottom: 16px;">🚧</div>
-                <h3 style="color: var(--text-primary); margin-bottom: 8px;">AI任务生成功能开发中</h3>
-                <p style="color: var(--text-muted); margin-bottom: 20px;">此功能需要集成智谱AI API，正在开发中...</p>
-                <button class="btn btn-primary" onclick="document.querySelector('[data-page=\\"task-manage\\"]').click()">前往任务管理</button>
+            <div class="card" style="max-width: 900px; margin: 0 auto;">
+                <div class="card-header">
+                    <h3 class="card-title">💬 AI任务生成助手</h3>
+                    <p style="color: var(--text-muted); font-size: 14px; margin-top: 8px;">描述你的需求，AI将自动生成详细的任务列表</p>
+                </div>
+                <div style="padding: 24px;">
+                    <!-- 聊天区域 -->
+                    <div id="chatMessages" style="min-height: 300px; max-height: 500px; overflow-y: auto; padding: 20px; background: var(--bg-tertiary); border-radius: 12px; margin-bottom: 20px;">
+                        <div class="ai-message" style="display: flex; gap: 12px; margin-bottom: 16px;">
+                            <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                🤖
+                            </div>
+                            <div style="flex: 1; background: var(--bg-card); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border);">
+                                <p style="margin: 0; line-height: 1.6;">你好！我是AI任务助手。请告诉我你的需求，我会帮你生成详细的任务列表。</p>
+                                <p style="margin: 8px 0 0 0; color: var(--text-muted); font-size: 13px;">例如："为新产品设计一套完整的营销方案" 或 "开发一个用户管理系统"</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 输入区域 -->
+                    <div style="display: flex; gap: 12px;">
+                        <textarea 
+                            id="aiInput" 
+                            placeholder="描述你的需求..." 
+                            style="flex: 1; padding: 12px; border: 1px solid var(--border); border-radius: 12px; resize: none; min-height: 80px; font-family: inherit;"
+                            onkeydown="if(event.key==='Enter' && event.ctrlKey) sendAIMessage()"
+                        ></textarea>
+                        <button class="btn btn-primary" onclick="sendAIMessage()" id="sendAIBtn" style="height: fit-content; padding: 12px 24px;">
+                            发送
+                        </button>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">提示：按 Ctrl+Enter 快速发送</p>
+                    
+                    <!-- 生成的任务列表 -->
+                    <div id="generatedTasks" style="margin-top: 24px; display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h4 style="font-size: 16px; font-weight: 600;">生成的任务列表</h4>
+                            <button class="btn btn-primary" onclick="confirmGeneratedTasks()">确认创建所有任务</button>
+                        </div>
+                        <div id="tasksList"></div>
+                    </div>
+                </div>
             </div>
         `;
     }
+    
+    // 发送AI消息
+    window.sendAIMessage = async function() {
+        const input = document.getElementById('aiInput');
+        const sendBtn = document.getElementById('sendAIBtn');
+        const chatMessages = document.getElementById('chatMessages');
+        const message = input.value.trim();
+        
+        if (!message) {
+            alert('请输入需求描述');
+            return;
+        }
+        
+        // 禁用输入
+        input.disabled = true;
+        sendBtn.disabled = true;
+        sendBtn.textContent = '生成中...';
+        
+        // 显示用户消息
+        const userMsg = document.createElement('div');
+        userMsg.style.cssText = 'display: flex; gap: 12px; margin-bottom: 16px; justify-content: flex-end;';
+        userMsg.innerHTML = `
+            <div style="max-width: 70%; background: var(--primary); color: white; padding: 12px 16px; border-radius: 12px;">
+                <p style="margin: 0; line-height: 1.6;">${message}</p>
+            </div>
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                👤
+            </div>
+        `;
+        chatMessages.appendChild(userMsg);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        // 显示加载消息
+        const loadingMsg = document.createElement('div');
+        loadingMsg.style.cssText = 'display: flex; gap: 12px; margin-bottom: 16px;';
+        loadingMsg.innerHTML = `
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                🤖
+            </div>
+            <div style="flex: 1; background: var(--bg-card); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border);">
+                <p style="margin: 0; color: var(--text-muted);">正在生成任务列表...</p>
+            </div>
+        `;
+        chatMessages.appendChild(loadingMsg);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        try {
+            // 获取员工列表
+            const employees = await EmployeeAPI.getEmployees();
+            
+            // 调用AI生成任务
+            const tasks = await zhipuAI.generateTasks(message, { employees });
+            
+            console.log('AI生成的任务:', tasks);
+            
+            // 移除加载消息
+            loadingMsg.remove();
+            
+            // 显示AI响应
+            const aiMsg = document.createElement('div');
+            aiMsg.style.cssText = 'display: flex; gap: 12px; margin-bottom: 16px;';
+            aiMsg.innerHTML = `
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--secondary)); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    🤖
+                </div>
+                <div style="flex: 1; background: var(--bg-card); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border);">
+                    <p style="margin: 0; line-height: 1.6;">我已经为你生成了 ${tasks.length} 个任务，请查看下方列表。你可以编辑任务或直接创建。</p>
+                </div>
+            `;
+            chatMessages.appendChild(aiMsg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            // 显示任务列表
+            displayGeneratedTasks(tasks, employees);
+            
+            // 清空输入
+            input.value = '';
+            
+        } catch (error) {
+            console.error('AI生成失败:', error);
+            
+            // 移除加载消息
+            loadingMsg.remove();
+            
+            // 显示错误消息
+            const errorMsg = document.createElement('div');
+            errorMsg.style.cssText = 'display: flex; gap: 12px; margin-bottom: 16px;';
+            errorMsg.innerHTML = `
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--danger); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    ❌
+                </div>
+                <div style="flex: 1; background: rgba(239, 68, 68, 0.1); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--danger);">
+                    <p style="margin: 0; color: var(--danger);">生成失败：${error.message}</p>
+                </div>
+            `;
+            chatMessages.appendChild(errorMsg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        } finally {
+            // 恢复输入
+            input.disabled = false;
+            sendBtn.disabled = false;
+            sendBtn.textContent = '发送';
+            input.focus();
+        }
+    };
+    
+    // 显示生成的任务
+    function displayGeneratedTasks(tasks, employees) {
+        const container = document.getElementById('generatedTasks');
+        const tasksList = document.getElementById('tasksList');
+        
+        tasksList.innerHTML = tasks.map((task, index) => `
+            <div class="card" style="margin-bottom: 16px;" data-task-index="${index}">
+                <div style="padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                        <div style="flex: 1;">
+                            <input type="text" value="${task.title}" 
+                                   class="task-title-input" 
+                                   style="width: 100%; font-size: 16px; font-weight: 600; border: 1px solid var(--border); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                            <textarea class="task-desc-input" 
+                                      style="width: 100%; border: 1px solid var(--border); padding: 8px; border-radius: 6px; min-height: 60px; resize: vertical;">${task.description}</textarea>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">优先级</label>
+                            <select class="task-priority-input" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;">
+                                <option value="low" ${task.priority === 'low' ? 'selected' : ''}>低</option>
+                                <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>中</option>
+                                <option value="high" ${task.priority === 'high' ? 'selected' : ''}>高</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">分配给</label>
+                            <select class="task-assignee-input" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;">
+                                <option value="">未分配</option>
+                                ${employees.map(emp => `<option value="${emp.id}">${emp.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">贡献值</label>
+                            <input type="number" value="${task.contribution || 30}" 
+                                   class="task-contribution-input"
+                                   style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        ${task.keywords?.map(kw => `<span class="tag">${kw}</span>`).join('') || ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        container.style.display = 'block';
+        
+        // 保存任务数据
+        window.generatedTasksData = tasks;
+        window.generatedTasksEmployees = employees;
+    }
+    
+    // 确认创建所有任务
+    window.confirmGeneratedTasks = async function() {
+        const taskCards = document.querySelectorAll('[data-task-index]');
+        const tasks = [];
+        
+        // 收集所有任务数据
+        taskCards.forEach((card, index) => {
+            const title = card.querySelector('.task-title-input').value;
+            const description = card.querySelector('.task-desc-input').value;
+            const priority = card.querySelector('.task-priority-input').value;
+            const assigneeId = card.querySelector('.task-assignee-input').value;
+            const contribution = parseInt(card.querySelector('.task-contribution-input').value);
+            const keywords = window.generatedTasksData[index].keywords || [];
+            
+            tasks.push({
+                title,
+                description,
+                priority,
+                assigneeId: assigneeId ? parseInt(assigneeId) : null,
+                contribution,
+                keywords,
+                type: 'child',
+                status: 'pending'
+            });
+        });
+        
+        if (tasks.length === 0) {
+            alert('没有任务可创建');
+            return;
+        }
+        
+        if (!confirm(`确定要创建 ${tasks.length} 个任务吗？`)) {
+            return;
+        }
+        
+        // 显示进度
+        const progressDiv = document.createElement('div');
+        progressDiv.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-card); padding: 24px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 10000; min-width: 300px; text-align: center;';
+        progressDiv.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+            <p style="margin: 0; font-weight: 600;">正在创建任务...</p>
+            <p style="margin: 8px 0 0 0; color: var(--text-muted);" id="progressText">0 / ${tasks.length}</p>
+        `;
+        document.body.appendChild(progressDiv);
+        
+        try {
+            let successCount = 0;
+            
+            // 逐个创建任务
+            for (let i = 0; i < tasks.length; i++) {
+                try {
+                    await TaskAPI.createTask(tasks[i]);
+                    successCount++;
+                    document.getElementById('progressText').textContent = `${successCount} / ${tasks.length}`;
+                } catch (error) {
+                    console.error(`创建任务 ${i + 1} 失败:`, error);
+                }
+            }
+            
+            progressDiv.remove();
+            
+            alert(`成功创建 ${successCount} 个任务！`);
+            
+            // 跳转到任务管理页面
+            document.querySelector('[data-page="task-manage"]').click();
+            
+        } catch (error) {
+            progressDiv.remove();
+            console.error('批量创建任务失败:', error);
+            alert('创建任务失败: ' + error.message);
+        }
+    };
     
     // ==================== 任务管理 ====================
     async function renderTaskManage() {
