@@ -6,6 +6,7 @@
     <title>管理员后台 - 任务管理系统</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="admin.css">
+    <link rel="stylesheet" href="logout.css">
 </head>
 <body>
     <div class="app-container">
@@ -56,9 +57,12 @@
                     <div class="user-menu">
                         <div class="user-avatar">管</div>
                         <div class="user-info">
-                            <div class="user-name">管理员</div>
+                            <div class="user-name" id="currentUserName">管理员</div>
                             <div class="user-role">Admin</div>
                         </div>
+                        <button class="logout-btn" onclick="logout()" title="退出登录">
+                            <span>🚪</span>
+                        </button>
                     </div>
                 </div>
             </header>
@@ -72,7 +76,24 @@
     
     <!-- AI任务生成模态框 - 已废弃，改为页面显示 -->
     
+    <script src="api-config.js"></script>
     <script src="admin-data.js"></script>
     <script src="admin.js"></script>
+    <script>
+        // 退出登录函数
+        function logout() {
+            if (confirm('确定要退出登录吗？')) {
+                AuthAPI.logout();
+            }
+        }
+        
+        // 页面加载时显示当前用户信息
+        document.addEventListener('DOMContentLoaded', function() {
+            const user = JSON.parse(localStorage.getItem('currentUser') || '{}');
+            if (user.name) {
+                document.getElementById('currentUserName').textContent = user.name;
+            }
+        });
+    </script>
 </body>
 </html>

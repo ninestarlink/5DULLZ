@@ -6,6 +6,7 @@
     <title>员工工作台 - 任务管理系统</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="employee.css">
+    <link rel="stylesheet" href="logout.css">
 </head>
 <body>
     <div class="app-container">
@@ -111,7 +112,25 @@
         </div>
     </div>
     
+    <script src="api-config.js"></script>
     <script src="employee-data.js"></script>
     <script src="employee.js"></script>
+    <script>
+        // 退出登录函数
+        function logout() {
+            if (confirm('确定要退出登录吗？')) {
+                AuthAPI.logout();
+            }
+        }
+        
+        // 页面加载时显示当前用户信息
+        document.addEventListener('DOMContentLoaded', function() {
+            const user = JSON.parse(localStorage.getItem('currentUser') || '{}');
+            if (user.name) {
+                document.getElementById('userName').textContent = user.name;
+                document.getElementById('userAvatar').textContent = user.avatar || user.name[0];
+            }
+        });
+    </script>
 </body>
 </html>

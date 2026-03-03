@@ -1,49 +1,36 @@
 // 员工工作台主逻辑
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     const navItems = document.querySelectorAll('.nav-item');
     const contentArea = document.getElementById('contentArea');
     const pageTitle = document.getElementById('pageTitle');
-    const userMenu = document.getElementById('userMenu');
-    const userDropdown = document.getElementById('userDropdown');
     const taskDetailModal = document.getElementById('taskDetailModal');
     
-    // 获取当前用户
-    let currentUser = localStorage.getItem('currentUser') || 'linshiyu';
-    let userData = employeeData[currentUser];
+    // 获取当前用户信息
+    let currentUser = null;
+    try {
+        currentUser = await AuthAPI.getCurrentUser();
+        console.log('当前用户:', currentUser);
+    } catch (error) {
+        console.error('获取用户信息失败:', error);
+        alert('获取用户信息失败，请重新登录');
+        window.location.href = 'index.html';
+        return;
+    }
     
     // 更新用户信息显示
     function updateUserDisplay() {
-        document.getElementById('userAvatar').textContent = userData.avatar;
-        document.getElementById('userName').textContent = userData.name;
+        if (currentUser) {
+            document.getElementById('userAvatar').textContent = currentUser.avatar || currentUser.name[0];
+            document.getElementById('userName').textContent = currentUser.name;
+            const roleMap = {
+                'admin': '管理员',
+                'employee': '员工'
+            };
+            document.getElementById('userRole').textContent = roleMap[currentUser.role] || '员工';
+        }
     }
     
     updateUserDisplay();
-    
-    // 用户菜单切换
-    userMenu.addEventListener('click', function(e) {
-        e.stopPropagation();
-        userDropdown.classList.toggle('active');
-    });
-    
-    // 点击其他地方关闭下拉菜单
-    document.addEventListener('click', function() {
-        userDropdown.classList.remove('active');
-    });
-    
-    // 用户切换
-    document.querySelectorAll('.dropdown-item[data-user]').forEach(item => {
-        item.addEventListener('click', function(e) {
-            e.stopPropagation();
-            currentUser = this.dataset.user;
-            userData = employeeData[currentUser];
-            localStorage.setItem('currentUser', currentUser);
-            updateUserDisplay();
-            userDropdown.classList.remove('active');
-            // 重新加载当前页面
-            const activePage = document.querySelector('.nav-item.active').dataset.page;
-            loadPage(activePage);
-        });
-    });
     
     // 导航切换
     navItems.forEach(item => {
@@ -58,11 +45,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 加载页面
-    function loadPage(page) {
+    async function loadPage(page) {
         switch(page) {
             case 'my-tasks':
                 pageTitle.textContent = '我的任务';
-                renderMyTasks();
+                await renderMyTasks();
                 break;
             case 'profile':
                 pageTitle.textContent = '个人资料';
@@ -70,402 +57,208 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             case 'notifications':
                 pageTitle.textContent = '通知中心';
-                renderNotifications();
+                await renderNotifications();
                 break;
         }
     }
     
     // 渲染我的任务
-    function renderMyTasks() {
-        const tasks = userData.tasks;
-        const pending = tasks.filter(t => t.status === 'pending');
-        const inProgress = tasks.filter(t => t.status === 'in_progress');
-        const review = tasks.filter(t => t.status === 'review');
-        const completed = tasks.filter(t => t.status === 'completed');
-        
-        contentArea.innerHTML = `
-            <!-- 筛选栏 -->
-            <div class="filter-bar">
-                <div class="filter-row">
-                    <div class="filter-group">
-                        <span class="filter-label">状态：</span>
-                        <select class="filter-select">
-                            <option>全部</option>
-                            <option>待处理</option>
-                            <option>进行中</option>
-                            <option>待验收</option>
-                            <option>已完成</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <span class="filter-label">时间：</span>
-                        <select class="filter-select">
-                            <option>全部</option>
-                            <option>今天</option>
-                            <option>本周</option>
-                            <option>逾期</option>
-                        </select>
-                    </div>
-                    <input type="text" class="search-input" placeholder="🔍 搜索任务...">
-                </div>
-            </div>
+    async function renderMyTasks() {
+        try {
+            // 从API获取任务
+            const allTasks = await TaskAPI.getTasks({ assignee_id: currentUser.id });
+            console.log('我的任务:', allTasks);
             
-            <!-- 视图切换 -->
-            <div style="display: flex; gap: 12px; margin-bottom: 20px;">
-                <button class="btn btn-primary" onclick="showKanbanView()">📊 看板视图</button>
-                <button class="btn btn-secondary" onclick="showListView()">📋 列表视图</button>
-            </div>
+            // 按状态分组
+            const tasksByStatus = {
+                pending: allTasks.filter(t => t.status === 'pending'),
+                in_progress: allTasks.filter(t => t.status === 'in_progress'),
+                review: allTasks.filter(t => t.status === 'review'),
+                completed: allTasks.filter(t => t.status === 'completed')
+            };
             
-            <!-- 看板视图 -->
-            <div id="kanbanView">
-                <div class="kanban-board">
-                    <div class="kanban-column">
-                        <div class="kanban-header">
-                            <div class="kanban-title">📌 待处理</div>
-                            <div class="kanban-count">${pending.length}</div>
-                        </div>
-                        <div class="kanban-cards">
-                            ${pending.map(task => renderTaskCard(task)).join('')}
+            contentArea.innerHTML = `
+                <div class="task-stats">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6);">📋</div>
+                        <div class="stat-info">
+                            <div class="stat-value">${allTasks.length}</div>
+                            <div class="stat-label">总任务数</div>
                         </div>
                     </div>
-                    
-                    <div class="kanban-column">
-                        <div class="kanban-header">
-                            <div class="kanban-title">▶️ 进行中</div>
-                            <div class="kanban-count">${inProgress.length}</div>
-                        </div>
-                        <div class="kanban-cards">
-                            ${inProgress.map(task => renderTaskCard(task)).join('')}
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">⏳</div>
+                        <div class="stat-info">
+                            <div class="stat-value">${tasksByStatus.pending.length + tasksByStatus.in_progress.length}</div>
+                            <div class="stat-label">进行中</div>
                         </div>
                     </div>
-                    
-                    <div class="kanban-column">
-                        <div class="kanban-header">
-                            <div class="kanban-title">✅ 待验收</div>
-                            <div class="kanban-count">${review.length}</div>
-                        </div>
-                        <div class="kanban-cards">
-                            ${review.map(task => renderTaskCard(task)).join('')}
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669);">✅</div>
+                        <div class="stat-info">
+                            <div class="stat-value">${tasksByStatus.completed.length}</div>
+                            <div class="stat-label">已完成</div>
                         </div>
                     </div>
-                    
-                    <div class="kanban-column">
-                        <div class="kanban-header">
-                            <div class="kanban-title">✔️ 已完成</div>
-                            <div class="kanban-count">${completed.length}</div>
-                        </div>
-                        <div class="kanban-cards">
-                            ${completed.map(task => renderTaskCard(task)).join('')}
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #6366f1);">💎</div>
+                        <div class="stat-info">
+                            <div class="stat-value">${currentUser.contribution || 0}</div>
+                            <div class="stat-label">贡献值</div>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
+                
+                <div class="task-board">
+                    ${renderTaskColumn('待处理', 'pending', tasksByStatus.pending)}
+                    ${renderTaskColumn('进行中', 'in_progress', tasksByStatus.in_progress)}
+                    ${renderTaskColumn('待审核', 'review', tasksByStatus.review)}
+                    ${renderTaskColumn('已完成', 'completed', tasksByStatus.completed)}
+                </div>
+            `;
+            
+            // 绑定任务卡片点击事件
+            document.querySelectorAll('.task-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    const taskId = this.dataset.taskId;
+                    const task = allTasks.find(t => t.id == taskId);
+                    if (task) {
+                        showTaskDetail(task);
+                    }
+                });
+            });
+            
+        } catch (error) {
+            console.error('获取任务失败:', error);
+            contentArea.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">😕</div>
+                    <h3 style="color: var(--text-primary); margin-bottom: 8px;">获取任务失败</h3>
+                    <p style="color: var(--text-muted);">${error.message}</p>
+                    <button class="btn btn-primary" onclick="location.reload()" style="margin-top: 20px;">重新加载</button>
+                </div>
+            `;
+        }
     }
     
-    // 渲染任务卡片
-    function renderTaskCard(task) {
-        const statusMap = {
-            pending: { badge: 'warning', text: '待处理' },
-            in_progress: { badge: 'info', text: '进行中' },
-            review: { badge: 'primary', text: '待验收' },
-            completed: { badge: 'success', text: '已完成' }
-        };
-        
-        const priorityMap = {
-            high: { badge: 'danger', text: '高' },
-            medium: { badge: 'warning', text: '中' },
-            low: { badge: 'info', text: '低' }
+    // 渲染任务列
+    function renderTaskColumn(title, status, tasks) {
+        const statusColors = {
+            pending: '#f59e0b',
+            in_progress: '#3b82f6',
+            review: '#8b5cf6',
+            completed: '#10b981'
         };
         
         return `
-            <div class="task-card ${task.priority}" onclick="openTaskDetail(${task.id})">
-                <div class="task-card-header">
-                    <div>
-                        <div class="task-card-title">${task.title}</div>
-                        ${task.parent ? `<div class="task-card-parent">📌 ${task.parent}</div>` : ''}
-                    </div>
-                    <span class="badge badge-${statusMap[task.status].badge}">${statusMap[task.status].text}</span>
+            <div class="task-column">
+                <div class="column-header">
+                    <h3>${title}</h3>
+                    <span class="task-count">${tasks.length}</span>
                 </div>
-                <div class="task-card-meta">
-                    <span>🏷️ ${task.keywords.join(' · ')}</span>
-                    <span>⏰ ${task.deadline}</span>
-                    <span>💎 ${task.contribution}</span>
+                <div class="task-list">
+                    ${tasks.length > 0 ? tasks.map(task => `
+                        <div class="task-card" data-task-id="${task.id}">
+                            <div class="task-card-header">
+                                <h4>${task.title}</h4>
+                                <span class="priority-badge priority-${task.priority}">${getPriorityText(task.priority)}</span>
+                            </div>
+                            <div class="task-card-body">
+                                <p>${task.description || '暂无描述'}</p>
+                                ${task.keywords && task.keywords.length > 0 ? `
+                                    <div class="task-tags">
+                                        ${task.keywords.map(kw => `<span class="tag">${kw}</span>`).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <div class="task-card-footer">
+                                <div class="task-meta">
+                                    <span>📅 ${task.deadline || '无截止日期'}</span>
+                                    <span>💎 ${task.contribution || 0}</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${task.progress || 0}%; background: ${statusColors[status]};"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('') : '<div class="empty-state">暂无任务</div>'}
                 </div>
             </div>
         `;
     }
     
-    // 打开任务详情
-    window.openTaskDetail = function(taskId) {
-        const task = userData.tasks.find(t => t.id === taskId);
-        if (!task) return;
-        
-        const taskDetailContent = document.getElementById('taskDetailContent');
-        taskDetailContent.innerHTML = `
-            <div class="task-detail-section">
-                <div class="task-detail-title">📋 任务信息</div>
-                <div class="task-detail-content">
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">任务标题</span>
-                        <span class="task-detail-value">${task.title}</span>
-                    </div>
-                    ${task.parent ? `
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">父任务</span>
-                        <span class="task-detail-value">${task.parent}</span>
-                    </div>
-                    ` : ''}
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">词条清单</span>
-                        <div class="keyword-list">
-                            ${task.keywords.map(kw => `<span class="keyword-tag">${kw}</span>`).join('')}
-                        </div>
-                    </div>
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">基础贡献度</span>
-                        <span class="task-detail-value">${task.contribution}</span>
-                    </div>
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">截止时间</span>
-                        <span class="task-detail-value">${task.deadline}</span>
-                    </div>
-                    <div class="task-detail-row">
-                        <span class="task-detail-label">任务描述</span>
-                        <span class="task-detail-value">${task.description}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="task-detail-section">
-                <div class="task-detail-title">📝 执行步骤</div>
-                <div class="task-detail-content">
-                    <ol class="step-list">
-                        <li class="step-item">线下创作内容（Word/文本编辑器）</li>
-                        <li class="step-item">在目标平台发布内容</li>
-                        <li class="step-item">保存发布内容为文件（Word/PDF/TXT）</li>
-                        <li class="step-item">上传文件并提交任务</li>
-                    </ol>
-                </div>
-            </div>
-            
-            ${task.status !== 'completed' ? `
-            <div class="task-detail-section">
-                <div class="task-detail-title">📎 提交任务</div>
-                <div class="task-detail-content">
-                    <div class="file-upload-area" id="fileUploadArea">
-                        <div class="file-upload-icon">📄</div>
-                        <div class="file-upload-text">点击或拖拽文件到此处上传</div>
-                        <div class="file-upload-hint">支持格式：.doc .docx .pdf .txt | 大小限制：≤10MB</div>
-                        <input type="file" id="fileInput" style="display: none;" accept=".doc,.docx,.pdf,.txt">
-                    </div>
-                    <div id="uploadedFiles"></div>
-                    <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" onclick="submitTask(${task.id})">提交任务</button>
-                </div>
-            </div>
-            ` : `
-            <div class="ai-score-card">
-                <div class="score-header">
-                    <div class="score-icon">✅</div>
-                    <div class="score-title">任务已完成</div>
-                    <div class="score-subtitle">该任务已通过AI评分验收</div>
-                </div>
-                <div class="contribution-display">
-                    <div class="contribution-label">获得贡献度</div>
-                    <div class="contribution-value">+${task.contribution}</div>
-                </div>
-            </div>
-            `}
-        `;
-        
-        // 文件上传交互
-        if (task.status !== 'completed') {
-            const fileUploadArea = document.getElementById('fileUploadArea');
-            const fileInput = document.getElementById('fileInput');
-            const uploadedFiles = document.getElementById('uploadedFiles');
-            
-            fileUploadArea.addEventListener('click', () => fileInput.click());
-            
-            fileInput.addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                if (file) {
-                    displayUploadedFile(file);
-                }
-            });
-            
-            // 拖拽上传
-            fileUploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                this.classList.add('dragover');
-            });
-            
-            fileUploadArea.addEventListener('dragleave', function() {
-                this.classList.remove('dragover');
-            });
-            
-            fileUploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                this.classList.remove('dragover');
-                const file = e.dataTransfer.files[0];
-                if (file) {
-                    displayUploadedFile(file);
-                }
-            });
-            
-            function displayUploadedFile(file) {
-                const fileSize = (file.size / 1024).toFixed(2) + ' KB';
-                uploadedFiles.innerHTML = `
-                    <div class="uploaded-file">
-                        <div class="file-icon">📄</div>
-                        <div class="file-info">
-                            <div class="file-name">${file.name}</div>
-                            <div class="file-size">${fileSize}</div>
-                        </div>
-                        <button class="file-remove" onclick="this.parentElement.remove()">×</button>
-                    </div>
-                `;
-            }
-        }
-        
-        taskDetailModal.classList.add('active');
-    };
+    // 获取优先级文本
+    function getPriorityText(priority) {
+        const map = {
+            high: '高',
+            medium: '中',
+            low: '低'
+        };
+        return map[priority] || '中';
+    }
     
-    // 关闭任务详情
-    window.closeTaskDetail = function() {
-        taskDetailModal.classList.remove('active');
-    };
-    
-    // 提交任务
-    window.submitTask = function(taskId) {
-        const uploadedFiles = document.getElementById('uploadedFiles');
-        if (!uploadedFiles.innerHTML.trim()) {
-            alert('请先上传文件！');
-            return;
-        }
-        
-        // 模拟AI评分
-        setTimeout(() => {
-            const result = Math.random() > 0.3 ? aiScoreResults.success : aiScoreResults.failed;
-            showAIScore(result);
-        }, 1500);
-    };
-    
-    // 显示AI评分结果
-    function showAIScore(result) {
-        const taskDetailContent = document.getElementById('taskDetailContent');
-        taskDetailContent.innerHTML = `
-            <div class="ai-score-card">
-                <div class="score-header">
-                    <div class="score-icon">${result.icon}</div>
-                    <div class="score-title">${result.title}</div>
-                    <div class="score-subtitle">${result.subtitle}</div>
-                </div>
-                
-                <div class="score-details">
-                    <div class="score-item ${result.scores.coverage.status}">
-                        <div class="score-item-label">${result.scores.coverage.label}</div>
-                        <div class="score-item-value">${result.scores.coverage.value}</div>
-                    </div>
-                    <div class="score-item ${result.scores.quality.status}">
-                        <div class="score-item-label">${result.scores.quality.label}</div>
-                        <div class="score-item-value">${result.scores.quality.value}</div>
-                    </div>
-                </div>
-                
-                ${result.status === 'success' ? `
-                    <div class="contribution-display">
-                        <div class="contribution-label">获得贡献度</div>
-                        <div class="contribution-value">+${result.contribution}</div>
-                        <div style="font-size: 13px; margin-top: 8px; opacity: 0.9;">${result.formula}</div>
-                    </div>
-                ` : `
-                    <div style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; border-left: 4px solid var(--danger);">
-                        <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 12px;">失败原因：</div>
-                        ${result.issues.map(issue => `<div style="color: var(--text-secondary); margin-bottom: 8px;">${issue}</div>`).join('')}
-                    </div>
-                `}
-                
-                <button class="btn ${result.status === 'success' ? 'btn-success' : 'btn-primary'}" 
-                        style="width: 100%; margin-top: 20px;" 
-                        onclick="closeTaskDetail()">
-                    ${result.status === 'success' ? '✅ 确认' : '🔄 重新提交'}
-                </button>
-            </div>
-        `;
+    // 显示任务详情
+    function showTaskDetail(task) {
+        // 简化版任务详情
+        alert(`任务详情：\n\n标题：${task.title}\n状态：${task.status}\n优先级：${task.priority}\n进度：${task.progress}%\n截止日期：${task.deadline || '无'}\n描述：${task.description || '无'}`);
     }
     
     // 渲染个人资料
     function renderProfile() {
         contentArea.innerHTML = `
-            <div class="profile-card">
-                <div class="profile-header">
-                    <div class="profile-avatar">${userData.avatar}</div>
-                    <div class="profile-info">
-                        <div class="profile-name">${userData.name}</div>
-                        <div class="profile-skills">
-                            ${userData.skills.map(skill => `<span class="profile-skill-tag">${skill}</span>`).join('')}
-                        </div>
-                    </div>
-                </div>
-                <div class="profile-stats">
-                    <div class="profile-stat">
-                        <div class="profile-stat-value">${userData.contribution}</div>
-                        <div class="profile-stat-label">累计贡献度</div>
-                    </div>
-                    <div class="profile-stat">
-                        <div class="profile-stat-value">${userData.tasksCompleted}</div>
-                        <div class="profile-stat-label">完成任务</div>
-                    </div>
-                    <div class="profile-stat">
-                        <div class="profile-stat-value">${userData.completionRate}%</div>
-                        <div class="profile-stat-label">完成率</div>
-                    </div>
-                </div>
-            </div>
-            
             <div class="card">
                 <div class="card-header">
-                    <h3 class="card-title">⭐ 等级徽章</h3>
+                    <h3 class="card-title">👤 个人信息</h3>
                 </div>
-                <div style="text-align: center; padding: 40px;">
-                    <div style="font-size: 64px; margin-bottom: 16px;">🏆</div>
-                    <div style="font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">
-                        ${userData.level}
-                    </div>
-                    <div style="color: var(--text-muted);">
-                        继续努力，向下一级进发！
+                <div style="padding: 20px;">
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-primary);">姓名</label>
+                            <input type="text" value="${currentUser.name}" readonly style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-tertiary);">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-primary);">用户名</label>
+                            <input type="text" value="${currentUser.username}" readonly style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-tertiary);">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-primary);">等级</label>
+                            <input type="text" value="${currentUser.level || '普通员工'}" readonly style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-tertiary);">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-primary);">贡献值</label>
+                            <input type="text" value="${currentUser.contribution || 0}" readonly style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-tertiary);">
+                        </div>
+                        <div style="grid-column: 1 / -1;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-primary);">技能标签</label>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                ${currentUser.skills && currentUser.skills.length > 0 
+                                    ? currentUser.skills.map(skill => `<span class="tag">${skill}</span>`).join('')
+                                    : '<span style="color: var(--text-muted);">暂无技能标签</span>'
+                                }
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
             
             <div class="card" style="margin-top: 20px;">
                 <div class="card-header">
-                    <h3 class="card-title">📊 数据统计</h3>
+                    <h3 class="card-title">📊 工作统计</h3>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding: 20px;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">
-                            ${userData.tasks.filter(t => t.status === 'pending').length}
+                <div style="padding: 20px;">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+                        <div style="text-align: center; padding: 20px; background: var(--bg-tertiary); border-radius: 12px;">
+                            <div style="font-size: 32px; font-weight: 600; color: var(--primary);">${currentUser.tasksCompleted || 0}</div>
+                            <div style="color: var(--text-muted); margin-top: 8px;">已完成任务</div>
                         </div>
-                        <div style="color: var(--text-muted);">待处理任务</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">
-                            ${userData.tasks.filter(t => t.status === 'in_progress').length}
+                        <div style="text-align: center; padding: 20px; background: var(--bg-tertiary); border-radius: 12px;">
+                            <div style="font-size: 32px; font-weight: 600; color: var(--success);">${currentUser.completionRate || 0}%</div>
+                            <div style="color: var(--text-muted); margin-top: 8px;">完成率</div>
                         </div>
-                        <div style="color: var(--text-muted);">进行中任务</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">
-                            ${userData.tasks.filter(t => t.status === 'review').length}
+                        <div style="text-align: center; padding: 20px; background: var(--bg-tertiary); border-radius: 12px;">
+                            <div style="font-size: 32px; font-weight: 600; color: var(--warning);">${currentUser.currentLoad || 0}%</div>
+                            <div style="color: var(--text-muted); margin-top: 8px;">当前负荷</div>
                         </div>
-                        <div style="color: var(--text-muted);">待验收任务</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">
-                            ${userData.tasks.filter(t => t.status === 'completed').length}
-                        </div>
-                        <div style="color: var(--text-muted);">已完成任务</div>
                     </div>
                 </div>
             </div>
@@ -473,25 +266,47 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 渲染通知中心
-    function renderNotifications() {
-        contentArea.innerHTML = `
-            <div class="notification-list">
-                ${notifications.map(notif => `
-                    <div class="notification-item ${notif.unread ? 'unread' : ''}">
-                        <div class="notification-icon ${notif.type}">
-                            ${notif.icon}
-                        </div>
-                        <div class="notification-content">
-                            <div class="notification-title">${notif.title}</div>
-                            <div class="notification-text">${notif.content}</div>
-                            <div class="notification-time">${notif.time}</div>
-                        </div>
+    async function renderNotifications() {
+        try {
+            const notifications = await NotificationAPI.getNotifications();
+            console.log('通知列表:', notifications);
+            
+            contentArea.innerHTML = `
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">🔔 通知中心</h3>
                     </div>
-                `).join('')}
-            </div>
-        `;
+                    <div style="padding: 20px;">
+                        ${notifications.length > 0 ? notifications.map(notif => `
+                            <div style="padding: 16px; background: ${notif.is_read ? 'var(--bg-tertiary)' : 'rgba(59, 130, 246, 0.1)'}; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid var(--primary);">
+                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                                    <h4 style="font-weight: 600; color: var(--text-primary);">${notif.title}</h4>
+                                    <span style="font-size: 12px; color: var(--text-muted);">${new Date(notif.created_at).toLocaleString('zh-CN')}</span>
+                                </div>
+                                <p style="color: var(--text-secondary); margin-bottom: 8px;">${notif.content}</p>
+                                ${!notif.is_read ? `<button class="btn btn-sm btn-primary" onclick="markAsRead(${notif.id})">标记已读</button>` : ''}
+                            </div>
+                        `).join('') : '<div class="empty-state">暂无通知</div>'}
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error('获取通知失败:', error);
+            contentArea.innerHTML = `<div class="empty-state">获取通知失败</div>`;
+        }
     }
     
-    // 初始加载我的任务
-    renderMyTasks();
+    // 标记通知已读
+    window.markAsRead = async function(notifId) {
+        try {
+            await NotificationAPI.markAsRead(notifId);
+            await renderNotifications();
+        } catch (error) {
+            console.error('标记已读失败:', error);
+            alert('操作失败');
+        }
+    };
+    
+    // 初始加载
+    loadPage('my-tasks');
 });
