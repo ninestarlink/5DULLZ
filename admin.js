@@ -425,7 +425,6 @@ document.addEventListener('DOMContentLoaded', async function() {
                                 分配给 ${task.suggestedEmployeeId ? '🤖 AI推荐' : ''}
                             </label>
                             <select class="task-assignee-input" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; ${task.suggestedEmployeeId ? 'background: rgba(59, 130, 246, 0.1);' : ''}">
-                                <option value="">未分配</option>
                                 ${employees.map(emp => `<option value="${emp.id}" ${emp.id === task.suggestedEmployeeId ? 'selected' : ''}>${emp.name}${emp.id === task.suggestedEmployeeId ? ' ⭐' : ''}</option>`).join('')}
                             </select>
                         </div>
@@ -585,6 +584,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                                     <td style="padding: 16px;">${task.deadline || '无'}</td>
                                     <td style="padding: 16px;">
                                         <button class="btn btn-sm btn-secondary" onclick="editTask(${task.id})" style="margin-right: 8px;">编辑</button>
+                                        <button class="btn btn-sm btn-primary" onclick="verifyTask(${task.id})" style="margin-right: 8px;">立即验收</button>
                                         <button class="btn btn-sm btn-danger" onclick="deleteTask(${task.id})">删除</button>
                                     </td>
                                 </tr>
@@ -725,8 +725,265 @@ document.addEventListener('DOMContentLoaded', async function() {
     };
     
     // 编辑任务
-    window.editTask = function(taskId) {
-        alert('编辑功能开发中...\n任务ID: ' + taskId);
+    window.editTask = async function(taskId) {
+        try {
+            const tasks = await TaskAPI.getTasks();
+            const task = tasks.find(t => t.id === taskId);
+            const employees = await EmployeeAPI.getEmployees();
+            
+            if (!task) {
+                alert('任务不存在');
+                return;
+            }
+            
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h2 class="modal-title">✏️ 编辑任务</h2>
+                        <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="editTaskForm" onsubmit="handleEditTask(event, ${taskId})">
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">任务标题 *</label>
+                                <input type="text" name="title" value="${task.title}" required style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">任务描述</label>
+                                <textarea name="description" rows="3" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">${task.description || ''}</textarea>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">分配给</label>
+                                    <select name="assigneeId" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                                        <option value="">未分配</option>
+                                        ${employees.map(emp => `<option value="${emp.id}" ${emp.id == task.assignee_id ? 'selected' : ''}>${emp.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">优先级</label>
+                                    <select name="priority" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                                        <option value="low" ${task.priority === 'low' ? 'selected' : ''}>低</option>
+                                        <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>中</option>
+                                        <option value="high" ${task.priority === 'high' ? 'selected' : ''}>高</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">状态</label>
+                                    <select name="status" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                                        <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>待处理</option>
+                                        <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>进行中</option>
+                                        <option value="review" ${task.status === 'review' ? 'selected' : ''}>待审核</option>
+                                        <option value="completed" ${task.status === 'completed' ? 'selected' : ''}>已完成</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">截止日期</label>
+                                    <input type="date" name="deadline" value="${task.deadline || ''}" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                                </div>
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">贡献值</label>
+                                <input type="number" name="contribution" value="${task.contribution || 0}" min="0" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">关键词（用逗号分隔）</label>
+                                <input type="text" name="keywords" value="${task.keywords?.join(', ') || ''}" placeholder="例如: ULL,远大,5ms" style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px;">
+                            </div>
+                            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                                <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">取消</button>
+                                <button type="submit" class="btn btn-primary" id="editSubmitBtn">保存修改</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+        } catch (error) {
+            console.error('加载任务失败:', error);
+            alert('加载任务失败: ' + error.message);
+        }
+    };
+    
+    // 处理编辑任务
+    window.handleEditTask = async function(event, taskId) {
+        event.preventDefault();
+        const form = event.target;
+        const submitBtn = form.querySelector('#editSubmitBtn');
+        const formData = new FormData(form);
+        
+        submitBtn.disabled = true;
+        submitBtn.textContent = '保存中...';
+        
+        try {
+            const taskData = {
+                title: formData.get('title'),
+                description: formData.get('description'),
+                assigneeId: formData.get('assigneeId') ? parseInt(formData.get('assigneeId')) : null,
+                priority: formData.get('priority'),
+                status: formData.get('status'),
+                deadline: formData.get('deadline') || null,
+                contribution: parseInt(formData.get('contribution')) || 0,
+                keywords: formData.get('keywords') ? formData.get('keywords').split(',').map(k => k.trim()) : []
+            };
+            
+            console.log('更新任务:', taskId, taskData);
+            await TaskAPI.updateTask(taskId, taskData);
+            
+            alert('任务更新成功！');
+            form.closest('.modal').remove();
+            await renderTaskManage();
+            
+        } catch (error) {
+            console.error('更新任务失败:', error);
+            alert('更新任务失败: ' + error.message);
+            submitBtn.disabled = false;
+            submitBtn.textContent = '保存修改';
+        }
+    };
+    
+    // 立即验收任务
+    window.verifyTask = async function(taskId) {
+        try {
+            const tasks = await TaskAPI.getTasks();
+            const task = tasks.find(t => t.id === taskId);
+            
+            if (!task) {
+                alert('任务不存在');
+                return;
+            }
+            
+            if (!task.keywords || task.keywords.length === 0) {
+                alert('该任务没有设置关键词，无法验收');
+                return;
+            }
+            
+            // 创建验收弹窗
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h2 class="modal-title">🔍 AI验收任务</h2>
+                        <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="margin-bottom: 20px;">
+                            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">${task.title}</h3>
+                            <p style="color: var(--text-muted); margin-bottom: 16px;">${task.description || '无描述'}</p>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <span style="font-weight: 500;">关键词：</span>
+                                ${task.keywords.map(kw => `<span class="tag">${kw}</span>`).join('')}
+                            </div>
+                        </div>
+                        
+                        <div id="verifyContent" style="min-height: 200px;">
+                            <div style="text-align: center; padding: 60px;">
+                                <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+                                <p style="color: var(--text-muted);">正在使用AI搜索关键词...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            // 调用AI搜索每个关键词
+            const verifyContent = document.getElementById('verifyContent');
+            verifyContent.innerHTML = '';
+            
+            for (const keyword of task.keywords) {
+                const keywordDiv = document.createElement('div');
+                keywordDiv.style.cssText = 'margin-bottom: 24px; padding: 20px; background: var(--bg-tertiary); border-radius: 12px; border: 1px solid var(--border);';
+                keywordDiv.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h4 style="font-size: 16px; font-weight: 600;">🔍 搜索关键词：${keyword}</h4>
+                        <span style="font-size: 14px; color: var(--text-muted);">搜索中...</span>
+                    </div>
+                    <div class="keyword-result" style="min-height: 100px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; margin-bottom: 8px;">⏳</div>
+                            <p>AI正在搜索...</p>
+                        </div>
+                    </div>
+                `;
+                verifyContent.appendChild(keywordDiv);
+                
+                try {
+                    // 调用AI搜索
+                    const searchPrompt = `请搜索并提供关于"${keyword}"的详细信息。要求：
+1. 提供准确、详细的信息
+2. 内容要包含"${keyword}"这个关键词
+3. 字数在200-500字之间
+4. 内容要专业、客观
+
+请直接返回搜索结果内容，不要有其他说明。`;
+                    
+                    const aiResponse = await zhipuAI.chat([
+                        { role: 'user', content: searchPrompt }
+                    ]);
+                    
+                    // 统计关键词出现次数（全字匹配）
+                    const regex = new RegExp(keyword, 'g');
+                    const matches = aiResponse.match(regex);
+                    const count = matches ? matches.length : 0;
+                    
+                    // 高亮显示关键词
+                    const highlightedContent = aiResponse.replace(
+                        regex, 
+                        `<mark style="background: #fef08a; padding: 2px 4px; border-radius: 3px; font-weight: 600;">${keyword}</mark>`
+                    );
+                    
+                    // 更新结果
+                    keywordDiv.querySelector('.keyword-result').innerHTML = `
+                        <div style="width: 100%;">
+                            <div style="padding: 16px; background: ${count > 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid ${count > 0 ? 'var(--success)' : 'var(--danger)'};">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 600; color: ${count > 0 ? 'var(--success)' : 'var(--danger)'};">
+                                        ${count > 0 ? '✅ 验收通过' : '❌ 验收失败'}
+                                    </span>
+                                    <span style="font-size: 20px; font-weight: 600; color: ${count > 0 ? 'var(--success)' : 'var(--danger)'};">
+                                        出现 ${count} 次
+                                    </span>
+                                </div>
+                            </div>
+                            <div style="padding: 16px; background: var(--bg-card); border-radius: 8px; line-height: 1.8; color: var(--text-secondary);">
+                                ${highlightedContent}
+                            </div>
+                        </div>
+                    `;
+                    
+                    keywordDiv.querySelector('h4').nextElementSibling.textContent = `完成 ✓`;
+                    keywordDiv.querySelector('h4').nextElementSibling.style.color = 'var(--success)';
+                    
+                } catch (error) {
+                    console.error(`搜索关键词 ${keyword} 失败:`, error);
+                    keywordDiv.querySelector('.keyword-result').innerHTML = `
+                        <div style="text-align: center; padding: 20px; color: var(--danger);">
+                            <div style="font-size: 24px; margin-bottom: 8px;">❌</div>
+                            <p>搜索失败: ${error.message}</p>
+                        </div>
+                    `;
+                    keywordDiv.querySelector('h4').nextElementSibling.textContent = `失败 ✗`;
+                    keywordDiv.querySelector('h4').nextElementSibling.style.color = 'var(--danger)';
+                }
+            }
+            
+            // 添加关闭按钮
+            const closeBtn = document.createElement('div');
+            closeBtn.style.cssText = 'text-align: center; margin-top: 24px;';
+            closeBtn.innerHTML = `<button class="btn btn-primary" onclick="this.closest('.modal').remove()">关闭</button>`;
+            verifyContent.appendChild(closeBtn);
+            
+        } catch (error) {
+            console.error('验收任务失败:', error);
+            alert('验收任务失败: ' + error.message);
+        }
     };
     
     // 删除任务
