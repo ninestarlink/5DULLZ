@@ -20,13 +20,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     // 更新用户信息显示
     function updateUserDisplay() {
         if (currentUser) {
-            document.getElementById('userAvatar').textContent = currentUser.avatar || currentUser.name[0];
-            document.getElementById('userName').textContent = currentUser.name;
-            const roleMap = {
-                'admin': '管理员',
-                'employee': '员工'
-            };
-            document.getElementById('userRole').textContent = roleMap[currentUser.role] || '员工';
+            const avatarEl = document.getElementById('userAvatar');
+            const nameEl = document.getElementById('userName');
+            const roleEl = document.getElementById('userRole');
+            
+            if (avatarEl) avatarEl.textContent = currentUser.avatar || currentUser.name[0];
+            if (nameEl) nameEl.textContent = currentUser.name;
+            if (roleEl) {
+                const roleMap = {
+                    'admin': '管理员',
+                    'employee': '员工'
+                };
+                roleEl.textContent = roleMap[currentUser.role] || '员工';
+            }
         }
     }
     
